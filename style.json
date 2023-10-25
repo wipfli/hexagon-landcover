@@ -1,0 +1,63 @@
+{
+    "version": 8,
+    "name": "Hexagon landcover",
+    "sources": {
+        "landcover": {
+            "type": "vector",
+            "url": "https://tiles.swiss-map.cc/hexagon-landcover.json"
+        }
+    },
+    "layers": [
+        {
+            "id": "background",
+            "type": "background",
+            "layout": {
+                "visibility": "visible"
+            },
+            "paint": {
+                "background-color": "white"
+            }
+        },
+        {
+            "id": "landcover",
+            "type": "fill",
+            "source": "landcover",
+            "source-layer": "landcover",
+            "layout": {
+                "visibility": "visible"
+            },
+            "paint": {
+                "fill-color": [
+                    "match",
+                    [
+                        "get",
+                        "value"
+                    ],
+                    10,
+                    "rgba(0,100,0,255)",
+                    20,
+                    "rgba(255,187,34,255)",
+                    30,
+                    "rgba(255,255,76,255)",
+                    40,
+                    "rgba(240,150,255,255)",
+                    50,
+                    "rgba(250,0,0,255)",
+                    60,
+                    "rgba(180,180,180,255)",
+                    70,
+                    "rgba(240,240,240,255)",
+                    80,
+                    "rgba(0,100,200,255)",
+                    90,
+                    "rgba(0,150,160,255)",
+                    95,
+                    "rgba(0,207,117,255)",
+                    100,
+                    "rgba(250,230,160,255)",
+                    "white"
+                ]
+            }
+        }
+    ]
+}
