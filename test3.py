@@ -155,6 +155,7 @@ def get_polygon(x_triangle, y_triangle, z):
 
 
 def get_hexagon(x_triangle, y_triangle):
+    # (x_hexagon, y_hexagon) is the (x_triangle, y_triangle) of the top left triangle of the hexagon
     x_hexagon = None
     y_hexagon = None
     if x_triangle % 6 in [1, 2, 3]:
@@ -533,6 +534,259 @@ def step_3(filename, z):
 
     print('step_3', time.time() - tic)
 
+def all_in_one(filename, z_min, z_max):
+    # from and including z_min to and including z_max
+
+    tic = time.time()
+
+    # Open the geotiff file
+    dataset = gdal.Open(f'downloads/{filename}')
+    
+    # Get the pixel values and the geotransform information
+    band = dataset.GetRasterBand(1)
+    nodata = band.GetNoDataValue()
+    geotransform = dataset.GetGeoTransform()
+    # pixel_values = band.ReadAsArray().astype(float)
+    pixel_values = band.ReadAsArray().astype(np.uint8)
+    
+    longitudes = [geotransform[0] + (j + 0.5) * geotransform[1] + (0 + 0.5) * geotransform[2] for j in range(pixel_values.shape[1])]
+    latitudes = [geotransform[3] + (0 + 0.5) * geotransform[4] + (i + 0.5) * geotransform[5] for i in range(pixel_values.shape[0])]
+
+    # print('longitudes', longitudes[0], longitudes[-1])
+    # print('latitudes', latitudes[0], latitudes[-1])
+
+
+    data = {
+        # z : {
+        #     'xs': list of x values
+        #     'ys': list of y values
+        #     'has_first_or_last_line': boolean if upper or lower line has first or last line
+        #     'inner_queue_part': number 
+        #     'triangles_current_line': {
+        #         'y': number
+        #         'counts': {
+        #             (x_triangle, y_triangle): list of counts
+        #             ...
+        #         }
+        #     }
+        #     'triangles_upper_line': ...
+        #     'triangles_lower_line': ...
+        #     'hexagons_outer_queue': {
+        #        (x_hexagon, y_hexagon): list of counts
+        #        ...
+        #     }
+        #     'hexagons_inner_queue': ...
+        # }
+    }
+    for z in range(z_min, z_max+1):
+        data[z] = {
+            'has_first_or_last_line': True,
+            'inner_queue_part': 0,
+            'triangles_current_line': {
+                'y': None,
+                'counts': {}
+            },
+            'triangles_lower_line': {
+                'y': None,
+                'counts': {}
+            },
+            'triangles_upper_line': {
+                'y': None,
+                'counts': {}
+            },
+            'hexagons_outer_queue': {},
+            'hexagons_inner_queue': {}
+        }
+
+    for z in data:
+        data[z]['xs'] = []
+        for longitude in longitudes:
+            x, _ = get_x_y(lat=0, lon=longitude, z=z)
+            data[z]['xs'].append(x)
+        
+        data[z]['ys'] = []
+        for latitude in latitudes:
+            _, y = get_x_y(lat=latitude, lon=0, z=z)
+            data[z]['ys'].append(y)
+    
+
+    for i in range(pixel_values.shape[0]):
+        for j in range(pixel_values.shape[1]):
+            # Skip nodata pixels
+            if pixel_values[i][j] == nodata:
+                continue
+
+            value = pixel_values[i][j]
+
+            for z in data:
+                x, y = data[z]['xs'][j], data[z]['ys'][i]
+                x_triangle, y_triangle = get_triangle(x, y, z)
+
+                if y_triangle != data[z]['triangles_current_line']['y']:
+                    if data[z]['triangles_upper_line']['y'] != None:
+                        data[z]['has_first_or_last_line'] = False
+                    data[z]['triangles_upper_line'] = data[z]['triangles_lower_line']
+                    data[z]['triangles_lower_line'] = data[z]['triangles_current_line']
+                    data[z]['triangles_current_line'] = {
+                        'y': y_triangle,
+                        'counts': {}
+                    }
+                    generate_hexagons(data, z)
+
+                    if len(data[z]['hexagons_inner_queue']) > 10000:
+                        clear_inner_queue(data, z)
+
+                counts = data[z]['triangles_current_line']['counts']
+                if (x_triangle, y_triangle) not in counts:            
+                    counts[(x_triangle, y_triangle)] = [0 for _ in range(11)]
+        
+                index = classes[value]['index']
+                counts[(x_triangle, y_triangle)][index] += 1
+
+
+                # # Print the progress
+                # pixels_processed = (i * pixel_values.shape[1]) + j + 1
+                # total_pixels = pixel_values.shape[0] * pixel_values.shape[1]
+                # if pixels_processed % 1000000 == 0:
+                #     progress = pixels_processed / total_pixels
+                #     print(f"step_1 {progress:.2%} complete")
+
+    for z in data:
+        data[z]['has_first_or_last_line'] = True
+
+        data[z]['triangles_upper_line'] = data[z]['triangles_lower_line']
+        data[z]['triangles_lower_line'] = data[z]['triangles_current_line']
+        data[z]['triangles_current_line'] = {
+            'y': data[z]['triangles_lower_line']['y'] + 1,
+            'counts': {}
+        }
+        generate_hexagons(data, z)
+
+        data[z]['triangles_upper_line'] = data[z]['triangles_lower_line']
+        data[z]['triangles_lower_line'] = data[z]['triangles_current_line']
+        data[z]['triangles_current_line'] = {
+            'y': data[z]['triangles_lower_line']['y'] + 1,
+            'counts': {}
+        }
+        generate_hexagons(data, z)
+
+    for z in data:
+        clear_inner_queue(data=data, z=z)
+        clear_outer_queue(data=data, z=z)
+
+    print('total duration', time.time() - tic)
+
+def generate_hexagons(data, z):
+    counts = {
+        # (x_hexagon, y_hexagon): list of counts
+        # ...
+    }
+
+    # sum lower triangles to hexagons
+    for x_y_triangle in data[z]['triangles_lower_line']['counts']:
+        x_triangle, y_triangle = x_y_triangle
+        x_hexagon, y_hexagon = get_hexagon(x_triangle, y_triangle)
+        if y_hexagon == y_triangle:
+            # the triangle is part of the next line of hexagons
+            continue
+
+        if (x_hexagon, y_hexagon) not in counts:
+            counts[(x_hexagon, y_hexagon)] = [0 for _ in range(11)]
+
+        for i in range(11):
+            counts[(x_hexagon, y_hexagon)][i] += data[z]['triangles_lower_line']['counts'][x_y_triangle][i]
+
+    # sum upper triangles to hexagons
+    for x_y_triangle in data[z]['triangles_upper_line']['counts']:
+        x_triangle, y_triangle = x_y_triangle
+        x_hexagon, y_hexagon = get_hexagon(x_triangle, y_triangle)
+        if y_hexagon != y_triangle:
+            # the triangle is part of the last line of hexagons
+            continue
+
+        if (x_hexagon, y_hexagon) not in counts:            
+            counts[(x_hexagon, y_hexagon)] = [0 for _ in range(11)]
+
+        for i in range(11):
+            counts[(x_hexagon, y_hexagon)][i] += data[z]['triangles_upper_line']['counts'][x_y_triangle][i]
+
+    # stop here if there were no hexagons generated
+    if len(counts) == 0:
+        return
+    
+    # get first and last hexagon, put to outer queue
+    x_values = []
+    for x_y_hexagon in counts:
+        x_hexagon, _ = x_y_hexagon
+        x_values.append(x_hexagon)
+    x_min = min(x_values)
+    x_max = max(x_values)
+    y = data[z]['triangles_lower_line']['y'] - 1
+    data[z]['hexagons_outer_queue'][(x_min, y)] = counts[(x_min, y)]
+    counts.pop((x_min, y))
+    data[z]['hexagons_outer_queue'][(x_max, y)] = counts[(x_max, y)]
+    counts.pop((x_max, y))
+    
+    if data[z]['has_first_or_last_line']:
+        data[z]['hexagons_outer_queue'].update(counts)
+    else:
+        data[z]['hexagons_inner_queue'].update(counts)
+
+def clear_inner_queue(data, z):
+    hexagons_majority = {}
+    for key in data[z]['hexagons_inner_queue']:
+        max_index = data[z]['hexagons_inner_queue'][key].index(max(data[z]['hexagons_inner_queue'][key]))
+        hexagons_majority[key] = classes_index_to_value[max_index]
+    
+    data[z]['hexagons_inner_queue'].clear()
+
+    write_data = {
+        'value': [],
+        'geometry': []
+    }
+
+    for key in hexagons_majority:
+        triangles = get_triangles(key[0], key[1])
+        for triangle in triangles:
+            write_data['value'].append(hexagons_majority[key])
+            write_data['geometry'].append(get_polygon(triangle[0], triangle[1], z))
+    
+    gdf = gpd.GeoDataFrame(write_data, crs='epsg:4326')
+    gdf = gdf.dissolve('value')
+
+    part = data[z]['inner_queue_part']
+    data[z]['inner_queue_part'] += 1
+    gdf.to_file(filename=f'output_step_3/{filename}-polygon-inner-part-{part}-z{z}.gpkg', driver="GPKG")
+
+
+
+def clear_outer_queue(data, z):
+    # writes polygons of the outer hexagons for debugging
+    # later should write hexagon counts instead for combination with neighboring outer hexagons
+
+    hexagons_majority = {}
+    for key in data[z]['hexagons_outer_queue']:
+        max_index = data[z]['hexagons_outer_queue'][key].index(max(data[z]['hexagons_outer_queue'][key]))
+        hexagons_majority[key] = classes_index_to_value[max_index]
+    
+    data[z]['hexagons_outer_queue'].clear()
+
+    write_data = {
+        'value': [],
+        'geometry': []
+    }
+
+    for key in hexagons_majority:
+        triangles = get_triangles(key[0], key[1])
+        for triangle in triangles:
+            write_data['value'].append(hexagons_majority[key])
+            write_data['geometry'].append(get_polygon(triangle[0], triangle[1], z))
+    
+    gdf = gpd.GeoDataFrame(write_data, crs='epsg:4326')
+    gdf = gdf.dissolve('value')
+
+    gdf.to_file(filename=f'output_step_3/{filename}-polygon-outer-z{z}.gpkg', driver="GPKG")
+
 
 
 
@@ -542,10 +796,12 @@ def step_3(filename, z):
 
 # filename = 'clipped-esa.tif'
 # filename = 'ESA_WorldCover_10m_2020_v100_N45E006_Map.tif'
-step_1(filename=filename, z=z)
-step_2(filename=filename, z=z)
-step_3(filename=filename, z=z)
+# step_1(filename=filename, z=z)
+# step_2(filename=filename, z=z)
+# step_3(filename=filename, z=z)
 
 # process_image_np(filename='ESA_WorldCover_10m_2020_v100_N66W039_Map.tif', z=17)
 # process_image_np(filename='clipped-esa.tif', z=17)
 
+all_in_one(filename=filename, z_min=z, z_max=z)
+# print(get_hexagon(x_triangle=5, y_triangle=1))
