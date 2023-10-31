@@ -4,7 +4,8 @@
     "sources": {
         "landcover": {
             "type": "vector",
-            "url": "https://tiles.swiss-map.cc/hexagon-landcover.json"
+            "url": "https://tiles.swiss-map.cc/hexagon-landcover.json",
+            "attribution": "<a href=\"https://worldcover2020.esa.int\">© ESA Worldcover</a>"
         },
         "swissmap": {
             "type": "vector",
