@@ -633,7 +633,7 @@ def all_in_one(filename, z_min, z_max):
                     }
                     generate_hexagons(data, z)
 
-                    if len(data[z]['hexagons_inner_queue']) > 10000:
+                    if len(data[z]['hexagons_inner_queue']) > 1e6:
                         clear_inner_queue(data, z)
 
                 counts = data[z]['triangles_current_line']['counts']
