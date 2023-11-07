@@ -34,7 +34,7 @@
             },
             "filter": ["==", ["get", "value"], 10],
             "paint": {
-                "fill-color": "#c2e2a3"
+                "fill-color": "#c1e4a8"
             }
         },
         {
@@ -3126,67 +3126,12 @@
                 "text-radial-offset": 0.2
             },
             "paint": {
-                "text-color": "#5c5c5c",
+                "text-color": "black",
                 "text-halo-color": "#e0e0e0",
                 "text-halo-width": 1
             }
         },
-        {
-            "id": "places_region",
-            "type": "symbol",
-            "source": "protomaps",
-            "source-layer": "places",
-            "filter": [
-                "==",
-                "pmap:kind",
-                "region"
-            ],
-            "layout": {
-                "symbol-sort-key": [
-                    "get",
-                    "pmap:min_zoom"
-                ],
-                "text-field": [
-                    "step",
-                    [
-                        "zoom"
-                    ],
-                    [
-                        "get",
-                        "name:short"
-                    ],
-                    5,
-                    [
-                        "get",
-                        "name"
-                    ]
-                ],
-                "text-font": [
-                    "Fira Sans Regular"
-                ],
-                "text-size": [
-                    "interpolate",
-                    [
-                        "linear"
-                    ],
-                    [
-                        "zoom"
-                    ],
-                    3,
-                    11,
-                    7,
-                    24
-                ],
-                "text-radial-offset": 0.2,
-                "text-anchor": "center",
-                "text-transform": "uppercase"
-            },
-            "paint": {
-                "text-color": "#b3b3b3",
-                "text-halo-color": "#e0e0e0",
-                "text-halo-width": 2
-            }
-        },
+        
         {
             "id": "places_country",
             "type": "symbol",
